@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-10-17T17:03:18.892Z",
+  "machine": {
+    "note": "PROXY numbers: this VM (Linux x86_64), Node 24.20.0, main-thread fake worker. On-device (Android WebView, real worker thread) numbers deferred to the APK / M1.",
+    "node": "v24.20.0",
+    "platform": "linux x64",
+    "cpus": 2,
+    "totalMemMB": 7935
+  },
+  "pdfjs": "pdfjs-dist 6.4.299 legacy build (pdf.mjs)",
+  "fixture": "assets/test-fixtures/folio-test.pdf (10 pages, 7950 bytes)",
+  "engineInitMs": 382.82,
+  "pages": 10,
+  "textItemsTotal": 99,
+  "textItemKeys": [
+    "dir",
+    "fontName",
+    "hasEOL",
+    "height",
+    "str",
+    "transform",
+    "width"
+  ],
+  "textExtractMsPerPage": {
+    "n": 30,
+    "p50": 3.97,
+    "p95": 26.79,
+    "mean": 10.66
+  },
+  "render1xMsPerPage": {
+    "n": 30,
+    "p50": 9.38,
+    "p95": 51.1,
+    "mean": 15.25
+  },
+  "render2xMsPerPage": {
+    "n": 30,
+    "p50": 6.1,
+    "p95": 28.32,
+    "mean": 8.19
+  },
+  "coldRender1xMsPerPage": {
+    "n": 10,
+    "p50": 14.22,
+    "p95": 148.07,
+    "mean": 31.23
+  },
+  "peakRssMB": 314.4,
+  "rssMarksMB": {
+    "after-import": 257.1,
+    "after-open": 275.6,
+    "after-warmup": 289.8,
+    "after-iteration": 314.4
+  }
+}
