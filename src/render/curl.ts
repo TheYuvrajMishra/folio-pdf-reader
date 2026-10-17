@@ -52,6 +52,7 @@ export interface CurlUniformParams {
  *  Skia's getUniformCount() only counts value uniforms.)
  */
 export function buildCurlUniforms(params: CurlUniformParams): Uniforms {
+  "worklet";
   const {
     width,
     height,
@@ -80,6 +81,7 @@ export function curlProgressFromDrag(
   pageWidth: number,
   direction: CurlDirection = "forward",
 ): number {
+  "worklet";
   if (pageWidth <= 0) {
     return 0;
   }

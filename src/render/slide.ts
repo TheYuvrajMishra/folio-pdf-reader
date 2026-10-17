@@ -47,6 +47,7 @@ export function cubicBezierY(
   x2: number,
   y2: number,
 ): number {
+  "worklet";
   const u = 1 - t;
   return (
     3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t
@@ -63,6 +64,7 @@ export function slideFrameAt(
   pageWidth: number,
   direction: SlideDirection = "forward",
 ): SlideFrame {
+  "worklet";
   const clamped = Math.min(1, Math.max(0, t));
   const e = cubicBezierY(clamped, ...SLIDE_EASING);
   const sign = direction === "forward" ? 1 : -1;

@@ -29,6 +29,7 @@ export interface FadeFrame {
 
 /** Describe one frame of the fade transition; t is linear progress 0..1. */
 export function fadeFrameAt(t: number): FadeFrame {
+  "worklet";
   const clamped = Math.min(1, Math.max(0, t));
   return {
     outgoingOpacity: 1 - clamped,

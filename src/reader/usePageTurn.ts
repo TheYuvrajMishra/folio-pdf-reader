@@ -204,14 +204,17 @@ export function usePageTurn(opts: UsePageTurnOpts): PageTurnApi {
   };
 
   const commitTurn = () => {
+    'worklet';
     settleTo(1, true);
   };
 
   const cancelTurn = () => {
+    'worklet';
     settleTo(0, false);
   };
 
   const runAnimatedTurn = (dir: 1 | -1) => {
+    'worklet';
     direction.value = dir;
     progress.value = 0;
     turning.value = true;
