@@ -68,7 +68,9 @@ jobs:
 
       - name: Verify APK signature
         run: |
-          $ANDROID_HOME/build-tools/*/apksigner verify --print-certs \
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          echo "Using apksigner: $APKSIGNER"
+          "$APKSIGNER" verify --print-certs \
             android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK artifact
