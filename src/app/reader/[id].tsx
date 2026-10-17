@@ -7,18 +7,19 @@
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getBook } from '../../data/books';
 import { ReaderScreen, type ReaderBook } from '../../reader/ReaderScreen';
 import { fontFamilies } from '../../theme/fonts';
-import { defaultTheme, monoLetterSpacing, spacing, themes, typeScale } from '../../theme/tokens';
-
-const theme = themes[defaultTheme];
+import { monoLetterSpacing, spacing, typeScale, type ThemeColors } from '../../theme/tokens';
+import { useTheme } from '../../theme/themeStore';
 
 export default function ReaderRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const t = useTheme((s) => s.colors);
+  const styles = useMemo(() => createStyles(t), [t]);
   const [book, setBook] = useState<ReaderBook | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,10 +75,11 @@ export default function ReaderRoute() {
   return <ReaderScreen key={book.id} book={book} />;
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: ThemeColors) {
+  return StyleSheet.create({
   center: {
     flex: 1,
-    backgroundColor: theme.bg,
+    backgroundColor: t.bg,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xxl,
@@ -86,12 +88,12 @@ const styles = StyleSheet.create({
   loading: {
     fontFamily: fontFamilies.serif,
     fontSize: typeScale.title2,
-    color: theme.inkMuted,
+    color: t.inkMuted,
   },
   error: {
     fontFamily: fontFamilies.serif,
     fontSize: typeScale.title3,
-    color: theme.ink,
+    color: t.ink,
     textAlign: 'center',
     lineHeight: typeScale.title3 * 1.4,
   },
@@ -100,13 +102,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.rule,
+    borderColor: t.rule,
     borderRadius: 999,
   },
   backButtonText: {
     fontFamily: fontFamilies.mono,
     fontSize: typeScale.small,
     letterSpacing: monoLetterSpacing,
-    color: theme.ink,
+    color: t.ink,
   },
-});
+  });
+}

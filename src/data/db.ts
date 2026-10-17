@@ -18,6 +18,8 @@ import { runMigrations } from './migrations';
 const DB_NAME = 'folio.db';
 
 let dbInstance: SQLiteDatabase | null = null;
+/** In-flight open: concurrent first-callers share it instead of double-opening. */
+let dbOpening: Promise<SQLiteDatabase> | null = null;
 
 function isSupportedRuntime(): boolean {
   // React Native (Hermes/JSC). Node has `process.versions.node`, web has
@@ -32,6 +34,9 @@ export async function getDb(): Promise<SQLiteDatabase> {
   if (dbInstance) {
     return dbInstance;
   }
+  if (dbOpening) {
+    return dbOpening;
+  }
   if (!isSupportedRuntime()) {
     throw new Error(
       'expo-sqlite is not available in this runtime (Node/web). ' +
@@ -39,12 +44,19 @@ export async function getDb(): Promise<SQLiteDatabase> {
     );
   }
   // Dynamic import: static import would crash Node/web bundling at load time.
-  const SQLite = await import('expo-sqlite');
-  const db = SQLite.openDatabaseSync(DB_NAME);
-  db.execSync('PRAGMA journal_mode=WAL;');
-  runMigrations(db);
-  dbInstance = db;
-  return db;
+  dbOpening = (async () => {
+    const SQLite = await import('expo-sqlite');
+    const db = SQLite.openDatabaseSync(DB_NAME);
+    db.execSync('PRAGMA journal_mode=WAL;');
+    runMigrations(db);
+    dbInstance = db;
+    return db;
+  })();
+  try {
+    return await dbOpening;
+  } finally {
+    dbOpening = null;
+  }
 }
 
 /**

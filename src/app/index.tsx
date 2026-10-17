@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   listBooks,
@@ -70,6 +70,13 @@ const SORTS: BookSort[] = ['recent', 'title', 'progress'];
 
 export default function LibraryScreen() {
   const t = useTheme((s) => s.colors);
+  const insets = useSafeAreaInsets();
+  // v1.0.2: the native SafeAreaView displaced the whole screen on one
+  // device (content started mid-screen) — manual inset padding instead,
+  // the same pattern ReaderScreen uses. Clamped: a status-bar inset is
+  // never taller than this; guards against garbage native inset values.
+  const padTop = Math.min(Math.max(insets.top, 0), 96);
+  const padBottom = Math.min(Math.max(insets.bottom, 0), 96);
   const styles = useMemo(() => createStyles(t), [t]);
   const [books, setBooks] = useState<BookVM[]>([]);
   const [sort, setSort] = useState<BookSort>('recent');
@@ -348,7 +355,7 @@ export default function LibraryScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <View style={[styles.safe, { paddingTop: padTop, paddingBottom: padBottom }]}>
       {/* Notebook margin rule — DESIGN.md §5. */}
       <View style={styles.marginRule} pointerEvents="none" />
 
@@ -509,7 +516,7 @@ export default function LibraryScreen() {
           </Pressable>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

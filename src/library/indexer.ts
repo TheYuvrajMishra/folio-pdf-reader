@@ -29,12 +29,13 @@ import type { PageGeom } from '../util/geometry';
 import { chunkRanges, nextResumePage } from './chunks';
 import { withEngineDocumentStreamed } from './engineSerial';
 import { base64ToBytes } from './base64';
+import { sanitizeMetadataAuthor, sanitizeMetadataTitle } from './metadata';
 
 /** Pages per persist chunk (PRD §6.1: chunked, resumable). */
 export const INDEX_CHUNK_PAGES = 10;
 /** Cover width target, px (PRD §6.1: page 1 @ 400 px). */
 export const COVER_WIDTH_PX = 400;
-/** Engine chunked-transfer ceiling — see PdfEngine.CHUNKED_TRANSFER_LIMIT_BYTES. */
+/** Engine chunked-transfer ceiling — streamed via openStreamed, never whole in memory. */
 const MAX_INDEX_BYTES = 200 * 1024 * 1024;
 
 /** Books with a live indexer right now. Guard: never two for one book. */
@@ -99,10 +100,12 @@ async function runIndex(bookId: string): Promise<void> {
   };
   await withEngineDocumentStreamed(size, readChunk, async (engine, opened) => {
     const numPages = opened.numPages;
+    // v1.0.2: PDF metadata is often junk ("(anonymous)") — only let it win
+    // over the filename-derived title when it looks like a real title.
     await updateBook(bookId, {
       pageCount: numPages,
-      title: opened.title?.trim() ? opened.title.trim() : book.title,
-      author: opened.author?.trim() ? opened.author.trim() : book.author,
+      title: sanitizeMetadataTitle(opened.title, book.title),
+      author: sanitizeMetadataAuthor(opened.author, book.author),
     });
 
     try {
