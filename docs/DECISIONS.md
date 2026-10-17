@@ -148,3 +148,69 @@ placeholder images — collect the real screenshots when reader UI work starts.
 - Inter and JetBrains Mono ship as **variable TTFs** (`assets/fonts/`), covering
   the weights DESIGN.md calls for: Inter 400/500/600, JetBrains Mono 400/500.
 - All fonts load via `expo-font` from the bundle — fully offline, no network.
+
+## M0 release (2026-10-17)
+- CI run 1 (tag v0.1.0 @ ecfbe50): FAILED at "Verify APK signature" — `$ANDROID_HOME/build-tools/*/apksigner` glob expanded to multiple build-tools dirs, apksigner rejected the extra path as a command. Fixed: resolve apksigner deterministically (`ls -d $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -n 1`). Pushed fix, moved tag to 278f0156.
+- CI run 2 (tag v0.1.0 @ 278f0156): SUCCESS. Release "Folio v0.1.0" published with `folio-v0.1.0.apk` (78.4 MB, arm64-v8a + armeabi-v7a, debug.keystore-signed).
+- Note: `gh` CLI is not authenticated on this VM; all GitHub operations went through the Composio v3 API (create repo `GITHUB_CREATE_A_REPOSITORY_FOR_THE_AUTHENTICATED_USER`, push via git-database blob/tree/commit through `github_push.py`, tag via `GITHUB_CREATE_A_REFERENCE` / delete+recreate to move it). CI status polled via the public REST API.
+
+## M1–M6 build log (2026-10-17/18)
+
+- **M1** — Library (SAF/document-picker import, covers, sort, dedupe),
+  reader core (Skia PageCanvas, zoom 1–5x, tap zones, scrubber, immersive),
+  resume at page **and line** via snippet-verified ResumeController, disk
+  page cache, crash-safe engine. Committed locally per milestone.
+- **M2** — Page-turn animations per the M2 agent contract:
+  `src/render/PageTurnView.tsx` (Skia RuntimeEffect curl, null→slide
+  fallback), `usePageTurn` (1:1 follow, 35%/800px-s commit, spring settle,
+  UI-thread sampler, auto-downgrade curl→slide persisted in settings),
+  `turnPolicy` pure helpers + tests. Integrated in ReaderScreen: drag turns
+  own horizontal staging (pan lost its swipe staging), tap zones use
+  animated turns, back-page raster preloaded for the curl's reverse face,
+  downgrade surfaces a toast.
+- **M3** — Reading ruler per the M3 agent contract: `useRuler` line
+  stepping with cross-page turns, empty-page parking + skip, skipMargins,
+  pixel-mode via engine `get-row-profile` (projection profiles, no pixels
+  cross the bridge), RulerOverlay (amber band, spring glide, cross-page
+  fade-in), RulerPill (draggable, 6/s long-press repeat, idle fade).
+  Added `restoreToLine`/`reland` for resume. Integrated: long-press (500 ms)
+  toggles, `▼` steps from pill (DESIGN §6.3), resume places the ruler at
+  the saved line, reader-driven turns re-land the ruler.
+- **M4** — Annotations per the M4 agent contract: SQLite `AnnotationStore`
+  (op-log + materialized table in one transaction; batch ops = one undo
+  step; linear history), selection snapper, Douglas-Peucker pen, Skia
+  `AnnotationLayer` with distinct shapes per type, `AnnotateToolbar`.
+  Integrated: toolbar swaps the scrubber, gestures swap to selection/pen/
+  eraser, note modal for text, undo/redo with 140 ms fades. `select` tool
+  currently offers only delete via an alert (move/recolor deferred).
+- **M5** — P1 pack per the M5 agent contract: FTS5 search (escaped
+  queries, ember match flash), ContentsSheet (contents·bookmarks·
+  highlights·pages), Markdown/JSON export + share, sessions + streak +
+  weekly stats, 4 themes + smart-invert PDF, keep-awake. Integrated as-is;
+  ruler/annotate menu rows now toggle the real features.
+- **M6** — Hardening: `PdfEngine.openStreamed` + chunked disk reads
+  (512 KB base64 slices via expo-file-system position/length) — the file
+  is never held whole in the JS heap; ceiling raised 64 MB → **200 MB**
+  (PRD §6.1); engine crash auto-retry on open (max 3, backoff, PRD §7.9);
+  launcher icon generated offline via `scripts/make-icons.py`
+  (DESIGN §10: near-black rounded square, open-book line art, ember line);
+  app version bumped to 1.0.0; README finalized.
+
+## Deviations / deferrals recorded (M1–M6)
+
+- **M5 agent installed no new deps** — expo-clipboard was not added
+  (export uses expo-sharing only; share sheet covers copy). No new native
+  modules were needed beyond the M0 set.
+- **Annotation move/recolor**: select-tool currently exposes delete only
+  (Alert). Full select affordances deferred.
+- **Ruler styles beyond band**: spotlight / underline ruler styles and the
+  pixel ruler are deferred (band only in v1.0.0).
+- **Auto-pacer, brightness/warm filter, backup/restore**: deferred to a
+  follow-up release (not PRD acceptance criteria).
+- **Thumbnail grid view**: library is list-only in v1.0.0.
+- **>200 MB files**: refused with a friendly message (documented limit).
+- **On-device validation still deferred**: 60 fps curl, WebView raster/text
+  throughput on ARM, expo-sqlite FTS5 latency, SkSL shader compile — all to
+  be measured on Yuvraj's phone from the v1.0.0 APK.
+- **Push policy change (Yuvraj, 2026-10-17)**: local commit per milestone,
+  single push + tag at the end — no per-milestone tags/releases.

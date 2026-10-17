@@ -247,6 +247,50 @@ const ENGINE_JS = `
         respondError(req.id, 'lines-failed', err);
       });
     },
+    'get-row-profile': function (req) {
+      if (!pdfDoc) { respondError(req.id, 'no-document', 'no document open'); return; }
+      // Pixel-mode fallback (PRD 6.5): render at thumbScale, compute per-row
+      // darkness sums (horizontal projection profile), post the sums back.
+      // No image bytes cross the bridge — just one small number array.
+      var scale = req.thumbScale > 0 && req.thumbScale <= 1 ? req.thumbScale : 0.25;
+      pdfDoc.getPage(req.pageNumber).then(function (page) {
+        var viewport = page.getViewport({ scale: scale });
+        var w = Math.max(1, Math.floor(viewport.width));
+        var h = Math.max(1, Math.floor(viewport.height));
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d', { alpha: false });
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+          var data = ctx.getImageData(0, 0, w, h).data;
+          var rowSums = new Array(h);
+          for (var y = 0; y < h; y++) {
+            var s = 0;
+            var off = y * w * 4;
+            for (var x = 0; x < w; x++) {
+              var i = off + x * 4;
+              // ITU-R BT.601 luma; darkness = 255 - luma.
+              var luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              s += 255 - luma;
+            }
+            rowSums[y] = Math.round(s);
+          }
+          canvas.width = 0;
+          canvas.height = 0;
+          respondOk(req.id, {
+            pageNumber: req.pageNumber,
+            thumbScale: scale,
+            widthPx: w,
+            heightPx: h,
+            rowSums: rowSums,
+          });
+        });
+      }).catch(function (err) {
+        respondError(req.id, 'row-profile-failed', err);
+      });
+    },
     'get-outline': function (req) {
       if (!pdfDoc) { respondError(req.id, 'no-document', 'no document open'); return; }
       pdfDoc.getOutline().then(function (outline) {

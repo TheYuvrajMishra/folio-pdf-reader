@@ -165,3 +165,12 @@ export const SCHEMA_TABLES_V1: readonly string[] = SCHEMA_STATEMENTS_V1.filter((
 export const SCHEMA_INDEXES_V1: readonly string[] = SCHEMA_STATEMENTS_V1.filter((s) =>
   /^\s*CREATE\s+INDEX/i.test(s),
 );
+
+/**
+ * Schema version 2: batch column on the op log.
+ * PRD §6.7 — multi-annotation actions (eraser sweep, clear page) are one
+ * batch op → a single undo step; the undo/redo grouping key is stored here.
+ */
+export const SCHEMA_STATEMENTS_V2: readonly string[] = [
+  `ALTER TABLE annotation_ops ADD COLUMN batch_id TEXT`,
+];

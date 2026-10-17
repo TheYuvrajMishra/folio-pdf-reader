@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-10-17T19:07:01.580Z",
+  "pdfjs": {
+    "version": "6.4.299",
+    "build": "d0991a0d5",
+    "source": "pdfjs-dist/legacy/build (bundled offline, no CDN)"
+  },
+  "main": {
+    "file": "assets/pdfjs/pdf.main.bundle.js",
+    "bytes": 528864,
+    "sha256": "35dd83b6512454756d43956b9a8844377c7a7ec699292e07946b1e05bdb15e1c"
+  },
+  "worker": {
+    "file": "assets/pdfjs/pdf.worker.bundle.js",
+    "bytes": 1321307,
+    "sha256": "145d2dd3ab0c86151011dba95acfa2d5336e2accd59388ea43dbee0efddaaec6"
+  },
+  "totalBytes": 1850171
+}

@@ -25,6 +25,7 @@ import {
   type EngineInbound,
   type EngineRequest,
   type GetLinesRequest,
+  type GetRowProfileRequest,
   type ImageFormat,
   type OpenBeginRequest,
   type OpenChunkRequest,
@@ -36,6 +37,7 @@ import {
   type RenderPageRequest,
   type RenderPageResult,
   type RequestId,
+  type RowProfileResult,
 } from './protocol';
 
 /** Structural type of the react-native-webview ref handle (v14 imperative API). */
@@ -54,6 +56,7 @@ export interface EnginePayloads {
   'open-url': OpenResult;
   'render-page': RenderPageResult;
   'get-lines': PageLinesResult;
+  'get-row-profile': RowProfileResult;
   'get-outline': OutlineNode[];
   'close': null;
   'ping': null;
@@ -231,22 +234,40 @@ export class PdfEngine {
 
   /**
    * Open a PDF from in-memory bytes via the chunked base64 path.
-   * Prefer openFile() on device (streams from disk, less JS heap).
+   * Prefer openStreamed() on device (streams from disk, less JS heap).
    */
   async openBytes(bytes: Uint8Array, password?: string): Promise<OpenResult> {
+    const chunkBytes = this.opts.chunkBytes;
+    return this.openStreamed(
+      bytes.length,
+      async (index) => bytes.subarray(index * chunkBytes, Math.min(bytes.length, (index + 1) * chunkBytes)),
+      password,
+    );
+  }
+
+  /**
+   * Open a PDF by streaming chunks from the caller (e.g. chunked disk reads).
+   * The JS heap never holds the whole file: each chunk is base64-encoded and
+   * sent as its own message (PRD §7.3 — never one giant message).
+   */
+  async openStreamed(
+    byteLength: number,
+    readChunk: (index: number) => Promise<Uint8Array>,
+    password?: string,
+  ): Promise<OpenResult> {
     const transferId = nextId('xfer');
     const chunkBytes = this.opts.chunkBytes;
-    const chunkCount = Math.max(1, Math.ceil(bytes.length / chunkBytes));
+    const chunkCount = Math.max(1, Math.ceil(byteLength / chunkBytes));
     const begin: OpenBeginRequest = {
       id: nextId('open'),
       kind: 'open-begin',
       transferId,
-      byteLength: bytes.length,
+      byteLength,
       chunkCount,
     };
     await this.enqueue(begin);
     for (let i = 0; i < chunkCount; i += 1) {
-      const slice = bytes.subarray(i * chunkBytes, Math.min(bytes.length, (i + 1) * chunkBytes));
+      const slice = await readChunk(i);
       const chunk: OpenChunkRequest = {
         id: nextId('chunk'),
         kind: 'open-chunk',
@@ -299,6 +320,21 @@ export class PdfEngine {
 
   getLines(pageNumber: number): Promise<PageLinesResult> {
     const req: GetLinesRequest = { id: nextId('lines'), kind: 'get-lines', pageNumber };
+    return this.enqueue(req);
+  }
+
+  /**
+   * Pixel-mode row profile (PRD §6.5): per-row darkness sums of the page
+   * rendered at thumbScale (default 0.25). Used by the reading ruler on
+   * image-only pages; see ruler/pixelMode.ts rowProfileToRows.
+   */
+  getRowProfile(pageNumber: number, thumbScale = 0.25): Promise<RowProfileResult> {
+    const req: GetRowProfileRequest = {
+      id: nextId('rowprofile'),
+      kind: 'get-row-profile',
+      pageNumber,
+      thumbScale,
+    };
     return this.enqueue(req);
   }
 

@@ -8,18 +8,39 @@
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { SCHEMA_STATEMENTS_V1 } from './schema';
+import { SCHEMA_STATEMENTS_V1, SCHEMA_STATEMENTS_V2 } from './schema';
 
-export const LATEST_SCHEMA_VERSION = 1;
+export const LATEST_SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Readonly<Record<number, readonly string[]>> = {
   1: SCHEMA_STATEMENTS_V1,
+  // v2: ALTER TABLE ... ADD COLUMN is idempotent only on fresh installs;
+  // on existing DBs it runs exactly once (user_version gate). A re-run
+  // after a crash between the ALTER and the version bump would fail with
+  // "duplicate column" — guarded below by checking PRAGMA table_info first.
+  2: SCHEMA_STATEMENTS_V2,
 };
 
 /** Read the current schema version recorded on the database file. */
 export function getSchemaVersion(db: SQLiteDatabase): number {
   const row = db.getFirstSync<{ user_version: number }>('PRAGMA user_version');
   return row?.user_version ?? 0;
+}
+
+/**
+ * True when `table` already has `column` (used to make ADD COLUMN
+ * migrations safe to re-run after a crash between the ALTER and the
+ * version bump — SQLite has no `ADD COLUMN IF NOT EXISTS`).
+ */
+export function hasColumn(
+  db: SQLiteDatabase,
+  table: string,
+  column: string,
+): boolean {
+  const cols = db.getAllSync<{ name: string }>(
+    `PRAGMA table_info(${table})`,
+  );
+  return cols.some((c) => c.name === column);
 }
 
 /**
@@ -35,6 +56,10 @@ export function runMigrations(db: SQLiteDatabase): void {
     }
     db.withTransactionSync(() => {
       for (const statement of statements) {
+        const addCol = /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/i.exec(statement);
+        if (addCol && hasColumn(db, addCol[1], addCol[2])) {
+          continue; // already applied (crash between ALTER and version bump)
+        }
         db.execSync(statement);
       }
     });

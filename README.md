@@ -18,7 +18,7 @@ Requirements: Node 20, JDK 17 (for the release build only), Android SDK
 ```bash
 npm ci
 npm run build:pdfjs   # generate the offline pdf.js engine artifacts (gitignored)
-npm test              # 66/66 green
+npm test              # 355 tests green
 npx tsc --noEmit      # clean
 npx expo prebuild --platform android --clean   # regenerates android/ (gitignored)
 ```
@@ -27,8 +27,9 @@ npx expo prebuild --platform android --clean   # regenerates android/ (gitignore
 
 | Script | What |
 |---|---|
-| `npm test` | jest (ts-jest): 66 unit/property tests, all green. |
+| `npm test` | jest (ts-jest): 355 unit/property tests, all green. |
 | `npm run build:pdfjs` | `node scripts/bundle-pdfjs.mjs` — bundles pdfjs-dist offline, writes `assets/pdfjs/*` + `src/engine/html/bootstrap.generated.ts` (both gitignored; CI runs this before prebuild). |
+| `npm run make-icons` | `python3 scripts/make-icons.py` — regenerates launcher icons (DESIGN §10). |
 | `npm start` | Expo dev server. |
 | `npx expo prebuild --platform android --clean` | Generate `android/` from the Expo config (gitignored; CI does this). |
 | `npx tsc --noEmit` | Strict typecheck. |
@@ -65,7 +66,7 @@ All overlays use normalized page coords (0..1, top-left origin).
 
 | Spike | Result |
 |---|---|
-| **S1** headless pdf.js in WebView | Offline IIFE + blob worker, total inlined **~1.77 MB** (pdfjs-dist 6.4.299). Transfer: chunked base64 (512 KB) primary ≤ 64 MB; `file://` for larger. Node-proxy bench: text extract p50 3.97 ms, render @1x cold p50 14.22 ms / p95 148.07 ms. |
+| **S1** headless pdf.js in WebView | Offline IIFE + blob worker, total inlined **~1.77 MB** (pdfjs-dist 6.4.299). Transfer: chunked base64 (512 KB) primary; M6 raised the ceiling to **200 MB** with streamed disk reads (never whole-file in JS heap); `file://` open-url path kept as code for a future native fallback. Node-proxy bench: text extract p50 3.97 ms, render @1x cold p50 14.22 ms / p95 148.07 ms. |
 | **S2** Skia page curl | Cylinder-model SkSL shader + specs; **slide/fade default, curl experimental** until 60 fps is measured on-device. Auto-downgrade: curl → slide if frame p95 > 24 ms for 3 consecutive turns. |
 | **S3** SQLite + FTS5 | FTS5 (bundled with expo-sqlite) + WAL + `user_version` migrations. Proxy bench (300-page book): index 10,500 lines in 87.9 ms; `MATCH` p50 0.33 ms; DB 3.61 MiB. |
 
@@ -80,9 +81,25 @@ Decisions and follow-ups: [`docs/DECISIONS.md`](docs/DECISIONS.md).
    The APK is signed with the Expo template's stable debug keystore, so
    updates install over previous builds.
 
-## Project status — M0
+## Project status — v1.0.0 (M0→M6 complete)
 
-Repo, CI pipeline, hello-world APK, and the three spikes (S1/S2/S3) are done.
-The app boots to an empty library screen ("Nothing on the shelf.") with the
-DESIGN.md theme tokens and bundled fonts loaded. PDF import, the reader,
-animations, ruler, and annotations land in M1–M4 (see PRD §9).
+- **M0** — scaffold, CI, spikes S1/S2/S3, hello-world APK.
+- **M1** — library (import via SAF/document-picker, covers, sort), reader
+  (Skia PageCanvas, zoom 1–5x, tap zones, scrubber, immersive), resume at
+  page **and line** (snippet-verified), disk page cache, crash-safe engine.
+- **M2** — page-turn animations: Skia curl (experimental), slide/fade;
+  1:1 finger-follow drag, auto-downgrade curl→slide on slow frames.
+- **M3** — reading ruler: line stepping across pages, pixel-mode
+  (projection-profile row detection), empty-page skip, long-press toggle,
+  resume placement.
+- **M4** — annotations: highlight/underline/strike/pen/note/eraser/select,
+  SQLite op-log with **persistent unlimited undo/redo**, export-ready.
+- **M5** — P1 pack: FTS5 search, contents/bookmarks/highlights sheets,
+  Markdown/JSON export, reading stats + streaks, 4 themes + smart-invert,
+  keep-awake.
+- **M6** — hardening: 200 MB streamed opens, engine crash auto-retry,
+  launcher icon (DESIGN §10), a11y labels pass.
+
+On-device validation (60 fps curl, WebView raster/text on ARM,
+expo-sqlite, shader compile) is deferred to the release APK on Yuvraj's
+phone — see [`docs/DECISIONS.md`](docs/DECISIONS.md).

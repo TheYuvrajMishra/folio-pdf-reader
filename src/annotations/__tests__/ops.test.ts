@@ -1,5 +1,53 @@
 import { OpLog, type Annotation, type Op } from '../ops';
 
+/**
+ * better-sqlite3 mock of ../../data/db (same pattern as
+ * src/data/__tests__/positions.test.ts): the REAL SQL from store.ts runs
+ * against a real SQLite engine, so the conformance suite below tests the
+ * actual SQL logic, not just query strings.
+ */
+jest.mock('../../data/db', () => {
+  const Database = require('better-sqlite3');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const {
+    SCHEMA_STATEMENTS_V1,
+    SCHEMA_STATEMENTS_V2,
+  } = require('../../data/schema');
+  const raw = new Database(':memory:');
+  for (const stmt of [...SCHEMA_STATEMENTS_V1, ...SCHEMA_STATEMENTS_V2]) {
+    raw.exec(stmt);
+  }
+
+  const toArray = (params: unknown): unknown[] =>
+    params === undefined ? [] : Array.isArray(params) ? params : [params];
+
+  const fake = {
+    getFirstAsync: (sql: string, params?: unknown) =>
+      Promise.resolve(raw.prepare(sql).get(toArray(params)) ?? null),
+    getAllAsync: (sql: string, params?: unknown) =>
+      Promise.resolve(raw.prepare(sql).all(toArray(params))),
+    runAsync: (sql: string, params?: unknown) => {
+      const info = raw.prepare(sql).run(toArray(params));
+      return Promise.resolve({
+        changes: info.changes,
+        lastInsertRowId: Number(info.lastInsertRowId),
+      });
+    },
+  };
+
+  return {
+    getDb: () => Promise.resolve(fake),
+    withTransaction: <T>(task: (db: unknown) => Promise<T>): Promise<T> =>
+      task(fake),
+    closeDb: () => Promise.resolve(),
+    __resetTables: () => {
+      raw.exec('DELETE FROM annotations; DELETE FROM annotation_ops;');
+    },
+  };
+});
+
+import { AnnotationStore, type Annotation as StoreAnnotation } from '../store';
+
 /** Deterministic PRNG (mulberry32) — no external deps. */
 function mulberry32(seed: number): () => number {
   let s = seed >>> 0;
@@ -273,5 +321,270 @@ describe('OpLog — property test (PRD §6.7 acceptance)', () => {
 
   test('long stress: 1000 ops, seed 5', () => {
     runScenario(5, 1000);
+  });
+});
+
+describe('SQLite store conformance (PRD §6.7 acceptance)', () => {
+  // The SAME seeded random op sequences drive both the in-memory OpLog
+  // and the SQLite-backed AnnotationStore; after every step the
+  // materialized states (and canUndo/canRedo) must be identical.
+  const { __resetTables } = jest.requireMock('../../data/db') as {
+    __resetTables: () => void;
+  };
+
+  const COLORS = ['yellow', 'red', 'blue', 'green', 'pink'];
+  const FIELDS = [
+    'id',
+    'book_id',
+    'page',
+    'type',
+    'color',
+    'opacity',
+    'dataJson',
+    'note',
+    'deleted',
+  ] as const;
+
+  const mkPayload = (
+    bookId: string,
+    id: string,
+    extra: Record<string, unknown> = {},
+  ): Annotation => ({
+    id,
+    book_id: bookId,
+    page: 1,
+    type: 'highlight',
+    color: 'yellow',
+    opacity: 1,
+    dataJson: { rects: [{ x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.22 }] },
+    note: null,
+    created_at: 0,
+    updated_at: 0,
+    deleted: 0,
+    ...extra,
+  });
+
+  /** Drop in-memory-only extras (e.g. `v`) → canonical store shape. */
+  const toStoreAnn = (bookId: string, a: Annotation | null): StoreAnnotation | null => {
+    if (!a) return null;
+    return {
+      id: a.id,
+      book_id: bookId,
+      page: typeof a['page'] === 'number' ? (a['page'] as number) : 1,
+      type: (a['type'] as StoreAnnotation['type']) ?? 'highlight',
+      color: typeof a['color'] === 'string' ? (a['color'] as string) : '#FFD60A',
+      opacity: typeof a['opacity'] === 'number' ? (a['opacity'] as number) : 1,
+      dataJson: (a['dataJson'] as StoreAnnotation['dataJson']) ?? {},
+      note: typeof a['note'] === 'string' ? (a['note'] as string) : null,
+      created_at: 0,
+      updated_at: 0,
+      deleted: a['deleted'] === 1 ? 1 : 0,
+    };
+  };
+
+  function canonState(m: Map<string, unknown>): string {
+    const entries = [...m.entries()].map(([id, v]) => {
+      const picked: Record<string, unknown> = {};
+      const rec = v as Record<string, unknown>;
+      for (const f of FIELDS) picked[f] = rec[f];
+      return [id, picked] as const;
+    });
+    entries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    return JSON.stringify(entries);
+  }
+
+  beforeEach(() => {
+    __resetTables();
+  });
+
+  async function driveDual(
+    seed: number,
+    steps: number,
+  ): Promise<{ undos: number; redos: number }> {
+    const rand = mulberry32(seed);
+    const bookId = `book-${seed}`;
+    const mem = new OpLog(bookId);
+    const store = new AnnotationStore(bookId);
+    const pick = <T>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
+
+    const allIds: string[] = [];
+    let idCounter = 0;
+    const newId = (): string => {
+      const id = `a${idCounter++}`;
+      allIds.push(id);
+      return id;
+    };
+    const liveIds = (): string[] => allIds.filter((id) => mem.state().has(id));
+    let undos = 0;
+    let redos = 0;
+
+    const storeState = async (): Promise<Map<string, unknown>> =>
+      new Map((await store.listAllAnnotations()).map((a) => [a.id, a]));
+
+    for (let i = 0; i < steps; i++) {
+      const r = rand();
+      if (r < 0.32 || allIds.length === 0) {
+        // add — sometimes a batch of adds
+        const n = rand() < 0.2 ? 2 + Math.floor(rand() * 3) : 1;
+        const inputs = Array.from({ length: n }, () => {
+          const id = newId();
+          return {
+            opType: 'add' as const,
+            annotationId: id,
+            after: mkPayload(bookId, id, {
+              color: pick(COLORS),
+              page: Math.floor(rand() * 50),
+            }),
+          };
+        });
+        mem.applyBatch(inputs);
+        await store.applyBatch(
+          inputs.map((inp) => ({
+            opType: inp.opType,
+            annotationId: inp.annotationId,
+            before: null,
+            after: toStoreAnn(bookId, inp.after),
+          })),
+        );
+      } else if (r < 0.55) {
+        // update a live annotation
+        const live = liveIds();
+        if (live.length === 0) {
+          const id = newId();
+          const after = mkPayload(bookId, id);
+          mem.applyOp({ opType: 'add', annotationId: id, after });
+          await store.applyBatch([
+            {
+              opType: 'add',
+              annotationId: id,
+              before: null,
+              after: toStoreAnn(bookId, after),
+            },
+          ]);
+        } else {
+          const id = pick(live);
+          const before = mem.state().get(id)!;
+          const after: Annotation = {
+            ...before,
+            color: pick(COLORS),
+            v: ((before.v as number | undefined) ?? 0) + 1,
+          };
+          mem.applyOp({ opType: 'update', annotationId: id, before, after });
+          await store.applyBatch([
+            {
+              opType: 'update',
+              annotationId: id,
+              before: toStoreAnn(bookId, before),
+              after: toStoreAnn(bookId, after),
+            },
+          ]);
+        }
+      } else if (r < 0.7) {
+        // delete — sometimes an eraser-sweep batch
+        const live = liveIds();
+        if (live.length === 0) {
+          const id = newId();
+          const after = mkPayload(bookId, id);
+          mem.applyOp({ opType: 'add', annotationId: id, after });
+          await store.applyBatch([
+            {
+              opType: 'add',
+              annotationId: id,
+              before: null,
+              after: toStoreAnn(bookId, after),
+            },
+          ]);
+        } else {
+          const n = rand() < 0.25 ? Math.min(live.length, 2 + Math.floor(rand() * 3)) : 1;
+          const victims = [...live].sort(() => rand() - 0.5).slice(0, n);
+          const inputs = victims.map((id) => ({
+            opType: 'delete' as const,
+            annotationId: id,
+            before: mem.state().get(id)!,
+            after: null,
+          }));
+          mem.applyBatch(inputs);
+          await store.applyBatch(
+            inputs.map((inp) => ({
+              opType: inp.opType,
+              annotationId: inp.annotationId,
+              before: toStoreAnn(bookId, inp.before),
+              after: null,
+            })),
+          );
+        }
+      } else if (r < 0.86) {
+        const a = mem.undo();
+        const b = await store.undo();
+        if ((a === null) !== (b === null)) {
+          throw new Error(`seed=${seed} step=${i}: undo null-ness diverged`);
+        }
+        if (a !== null) undos++;
+      } else {
+        const a = mem.redo();
+        const b = await store.redo();
+        if ((a === null) !== (b === null)) {
+          throw new Error(`seed=${seed} step=${i}: redo null-ness diverged`);
+        }
+        if (a !== null) redos++;
+      }
+      // PRD acceptance: identical materialized state after EVERY step.
+      const memCanon = canonState(mem.state());
+      const storeCanon = canonState(await storeState());
+      if (memCanon !== storeCanon) {
+        throw new Error(
+          `seed=${seed} step=${i}: SQLite store state != in-memory OpLog state`,
+        );
+      }
+      if ((await store.canUndo()) !== mem.canUndo()) {
+        throw new Error(`seed=${seed} step=${i}: canUndo diverged`);
+      }
+      if ((await store.canRedo()) !== mem.canRedo()) {
+        throw new Error(`seed=${seed} step=${i}: canRedo diverged`);
+      }
+    }
+    return { undos, redos };
+  }
+
+  test.each([1, 7, 42])(
+    'seed %i: 150 dual-driven ops keep SQLite state == in-memory state',
+    async (seed) => {
+      const { undos, redos } = await driveDual(seed, 150);
+      expect(undos).toBeGreaterThan(0);
+      expect(redos).toBeGreaterThan(0);
+    },
+  );
+
+  test('batch undo is a single step in the SQLite store too', async () => {
+    const store = new AnnotationStore('book-batch');
+    await store.applyBatch([
+      {
+        opType: 'add',
+        annotationId: 'b1',
+        before: null,
+        after: toStoreAnn('book-batch', mkPayload('book-batch', 'b1')),
+      },
+      {
+        opType: 'add',
+        annotationId: 'b2',
+        before: null,
+        after: toStoreAnn('book-batch', mkPayload('book-batch', 'b2')),
+      },
+    ]);
+    expect((await store.listAllAnnotations()).map((a) => a.id).sort()).toEqual([
+      'b1',
+      'b2',
+    ]);
+    const undone = await store.undo();
+    expect(undone).not.toBeNull();
+    expect(undone).toHaveLength(2); // one step undoes the whole batch
+    expect(await store.listAllAnnotations()).toHaveLength(0);
+    expect(await store.canUndo()).toBe(false);
+    const redone = await store.redo();
+    expect(redone).toHaveLength(2);
+    expect((await store.listAllAnnotations()).map((a) => a.id).sort()).toEqual([
+      'b1',
+      'b2',
+    ]);
   });
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Folio",
     "slug": "folio",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "folio",
@@ -18,7 +18,19 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.yuvrajmishra.folio"
+      "package": "com.yuvrajmishra.folio",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [{ "mimeType": "application/pdf" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "SEND",
+          "data": [{ "mimeType": "application/pdf" }],
+          "category": ["DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "server",

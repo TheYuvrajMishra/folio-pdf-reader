@@ -53,6 +53,7 @@
     "start": "expo start",
     "test": "jest",
     "build:pdfjs": "node scripts/bundle-pdfjs.mjs",
+    "make-icons": "python3 scripts/make-icons.py",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",

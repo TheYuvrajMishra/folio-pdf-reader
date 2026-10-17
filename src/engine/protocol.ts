@@ -71,6 +71,21 @@ export interface GetLinesRequest {
   pageNumber: number; // 1-based
 }
 
+/**
+ * Pixel-mode fallback (PRD §6.5): per-row darkness sums of the page
+ * rendered at thumbScale (typically 0.25). The WebView renders the page to
+ * an offscreen canvas, computes grayscale row sums, and posts them back —
+ * one small message, no image transfer. RN peak-picks text rows from the
+ * sums (see ruler/pixelMode.ts rowProfileToRows).
+ */
+export interface GetRowProfileRequest {
+  id: RequestId;
+  kind: 'get-row-profile';
+  pageNumber: number; // 1-based
+  /** Render scale for the thumbnail, 0..1 (0.25 per PRD §6.5). */
+  thumbScale: number;
+}
+
 export interface GetOutlineRequest {
   id: RequestId;
   kind: 'get-outline';
@@ -93,6 +108,7 @@ export type EngineRequest =
   | OpenUrlRequest
   | RenderPageRequest
   | GetLinesRequest
+  | GetRowProfileRequest
   | GetOutlineRequest
   | CloseRequest
   | PingRequest;
@@ -146,6 +162,16 @@ export interface RenderPageResult {
   chunks: string[];
 }
 
+/** Response payload for get-row-profile. */
+export interface RowProfileResult {
+  pageNumber: number;
+  thumbScale: number;
+  widthPx: number;
+  heightPx: number;
+  /** Per-row darkness sums (0..widthPx*255 each), top→bottom. */
+  rowSums: number[];
+}
+
 export interface OutlineNode {
   title: string;
   /** Raw destination (may be null); RN resolves it against the document. */
@@ -162,7 +188,7 @@ export interface EngineResponse {
   id: RequestId;
   kind: 'response';
   ok: true;
-  payload: OpenResult | RenderPageResult | PageLinesResult | OutlineNode[] | null;
+  payload: OpenResult | RenderPageResult | PageLinesResult | RowProfileResult | OutlineNode[] | null;
 }
 
 export interface EngineErrorResponse {
@@ -201,6 +227,7 @@ const REQUEST_KINDS: ReadonlySet<string> = new Set([
   'open-url',
   'render-page',
   'get-lines',
+  'get-row-profile',
   'get-outline',
   'close',
   'ping',
