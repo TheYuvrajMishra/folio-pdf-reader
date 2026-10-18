@@ -71,7 +71,9 @@ export function usePdfEngine(): PdfEngine {
   /** Send a message RN → WebView (escapes `<` so PDF text can't break out). */
   const send = useCallback((msg: EngineRequest) => {
     const json = JSON.stringify(msg).replace(/</g, '\\u003c');
-    const js = `(function(){var d=${json};var e=new MessageEvent('message',{data:d});document.dispatchEvent(e);window.dispatchEvent(e);})();true;`;
+    // Dispatch exactly once, on window — the engine listens on window only.
+    // (Dispatching on both window and document double-handles messages.)
+    const js = `(function(){var d=${json};window.dispatchEvent(new MessageEvent('message',{data:d}));})();true;`;
     webviewRef.current?.injectJavaScript(js);
   }, []);
 

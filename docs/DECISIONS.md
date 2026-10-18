@@ -55,6 +55,14 @@ No images invented or copied. Borrowed ideas, by name:
   rotate boxes onto the display frame (`rotateBox` in lines.js, mirrors
   `geometry.ts rotateNormRect`). Raster uses the rotated viewport, so
   overlays match the bitmap.
+- **S1b — protocol integration**: the exact generated WebView module was
+  driven end-to-end in Node (browser shims): open (chunked bytes) → 20
+  pages + title; pageCount; getLines → 42 lines via chunked reassembly;
+  renderPage → **WebP** 612×792, 86 KiB; getOutline; close. All green.
+- **Double-dispatch bug found by S1b**: RN dispatched each message on both
+  `document` and `window` while the engine listened on both → every request
+  ran twice (two concurrent renders on one canvas). Fix: single target —
+  dispatch on `window`, listen on `window` (bootstrap.js + PdfEngine.tsx).
 - Verdict: **PASS** — p95 raster 52 ms is far under the 800 ms §7.7
   threshold; no fallback needed. (Device WebView numbers will differ; the
   decisive measurement is on-device in M1. The chunked, cancellable,

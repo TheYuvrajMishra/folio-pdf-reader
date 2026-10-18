@@ -32,7 +32,7 @@ module.exports = {
     package: 'com.yuvrajmishra.folio',
     versionCode: runNumber,
     adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
+      foregroundImage: './assets/android-icon-foreground.png',
       backgroundColor: '#0E0E10',
     },
     // No network permission, no storage permission (PRD §7.10).

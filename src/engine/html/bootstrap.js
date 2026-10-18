@@ -263,7 +263,9 @@
     }
   }
 
-  document.addEventListener('message', function (e) { onMessage(e.data); });
+  // Single message target: window. (RN dispatches exactly one MessageEvent
+  // on window per request; listening on both window and document would
+  // double-handle every message — e.g. two concurrent renders on one canvas.)
   window.addEventListener('message', function (e) { onMessage(e.data); });
   // Signal readiness to the RN host.
   post({ id: '__ready', type: 'ready' });

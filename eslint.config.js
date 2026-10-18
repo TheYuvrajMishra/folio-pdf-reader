@@ -34,6 +34,16 @@ module.exports = [
     },
   },
   {
-    ignores: ['node_modules/', 'android/', 'ios/', '.expo/', 'dist/'],
+    ignores: [
+      'node_modules/',
+      'android/',
+      'ios/',
+      '.expo/',
+      'dist/',
+      // Generated artifacts: the pdf.js engine bundle and the extracted
+      // module fixture used by the S1b protocol spike.
+      'src/engine/html/engineHtml.ts',
+      'scripts/spikes/fixtures/**',
+    ],
   },
 ];
