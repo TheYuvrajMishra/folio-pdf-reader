@@ -96,7 +96,22 @@ Sepia `ink` was `#2A2218` → 12.77:1 on `#F1E7D3`, below the required 14:1.
 Hand-tuned to `#211A10` (14.03:1). All four themes now pass ink ≥ 14:1,
 ink-muted ≥ 4.5:1, on-accent ≥ 4.5:1 in `src/theme/__tests__/contrast.test.ts`.
 
+### No INTERNET permission (PRD §7.10, §12)
+`android.blockedPermissions: ['android.permission.INTERNET']` in
+app.config.js — the pdf.js engine is fully inlined and the WebView never
+loads remote content, so the release APK declares no network permission.
+Verified: generated manifest carries `tools:node="remove"` on the INTERNET
+entry (stripped by the manifest merger at build time).
+Caveat: local debug builds (`expo run:android`) need INTERNET for Metro —
+comment the line out temporarily when debugging on-device.
+
 ### Engine bundle is generated, not committed
+`src/engine/html/engineHtml.ts` (~3.5 MB) is gitignored; `npm run
+bundle:pdfjs` regenerates it from `node_modules/pdfjs-dist` +
+`src/engine/html/{bootstrap,lines}.js`. CI runs it after `npm ci`, before
+typecheck (the import in PdfEngine.tsx requires it to exist).
+Rationale: the bundle is a deterministic build artifact of pinned inputs;
+committing it would bloat every diff.
 `src/engine/html/engineHtml.ts` (~2.4 MB) is gitignored; `npm run
 bundle:pdfjs` regenerates it from `node_modules/pdfjs-dist` +
 `src/engine/html/{bootstrap,lines}.js`. CI runs it after `npm ci`.

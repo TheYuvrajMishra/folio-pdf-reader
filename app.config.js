@@ -35,9 +35,11 @@ module.exports = {
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundColor: '#0E0E10',
     },
-    // No network permission, no storage permission (PRD §7.10).
-    // App-private storage + SAF picker only.
-    permissions: [],
+    // No network permission at runtime (PRD §7.10, §12). The pdf.js engine
+    // is fully inlined; the WebView never loads remote content.
+    // Note: local debug builds (`expo run:android`) need INTERNET for Metro —
+    // comment this out temporarily when debugging on-device.
+    blockedPermissions: ['android.permission.INTERNET'],
   },
   plugins: ['expo-router', 'expo-font'],
   experiments: {
