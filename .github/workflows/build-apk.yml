@@ -42,6 +42,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Bundle pdf.js engine (offline)
+        # Generates src/engine/html/engineHtml.ts (gitignored) which
+        # PdfEngine.tsx imports — must run before typecheck/lint/tests.
+        run: npm run bundle:pdfjs
+
       - name: Typecheck
         run: npx tsc --noEmit
 
@@ -50,9 +55,6 @@ jobs:
 
       - name: Unit tests
         run: npm test
-
-      - name: Bundle pdf.js engine (offline)
-        run: npm run bundle:pdfjs
 
       - name: Expo prebuild (Android)
         run: npx expo prebuild --platform android --clean --non-interactive
