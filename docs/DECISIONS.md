@@ -112,8 +112,3 @@ bundle:pdfjs` regenerates it from `node_modules/pdfjs-dist` +
 typecheck (the import in PdfEngine.tsx requires it to exist).
 Rationale: the bundle is a deterministic build artifact of pinned inputs;
 committing it would bloat every diff.
-`src/engine/html/engineHtml.ts` (~2.4 MB) is gitignored; `npm run
-bundle:pdfjs` regenerates it from `node_modules/pdfjs-dist` +
-`src/engine/html/{bootstrap,lines}.js`. CI runs it after `npm ci`.
-Rationale: the bundle is a deterministic build artifact of pinned inputs;
-committing it would bloat every diff.
