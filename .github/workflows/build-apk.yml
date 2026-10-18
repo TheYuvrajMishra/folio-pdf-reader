@@ -1,0 +1,107 @@
+name: Build Folio APK
+
+# M0: proves the pipeline. Tags v* (e.g. v2.0.0-m0) and manual runs.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GITHUB_RUN_NUMBER: ${{ github.run_number }}
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version name
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "FOLIO_VERSION_NAME=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          else
+            echo "FOLIO_VERSION_NAME=build-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Bundle pdf.js engine (offline)
+        run: npm run bundle:pdfjs
+
+      - name: Expo prebuild (Android)
+        run: npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Ensure keystore + release signing
+        # The Expo prebuild template signs `release` with its bundled
+        # android/app/debug.keystore (stable across builds → updates install
+        # over previous ones). Verify; generate only if missing.
+        run: |
+          if [ ! -f android/app/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore android/app/debug.keystore \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Folio Debug, OU=Folio, O=Yuvraj Mishra, C=IN"
+          fi
+          grep -q "signingConfig signingConfigs.debug" android/app/build.gradle \
+            || { echo "release buildType is not signed by the debug keystore"; exit 1; }
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --no-daemon --stacktrace
+
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Rename APK
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="build-$GITHUB_RUN_NUMBER"; fi
+          cp android/app/build/outputs/apk/release/app-release.apk "folio-$TAG.apk"
+          ls -lh "folio-$TAG.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: folio-apk
+          path: folio-*.apk
+          retention-days: 30
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="build-$GITHUB_RUN_NUMBER"; fi
+          gh release create "$TAG" "folio-$TAG.apk" --title "Folio $TAG" --generate-notes --target "$GITHUB_SHA" || gh release upload "$TAG" "folio-$TAG.apk" --clobber
